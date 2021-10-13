@@ -18,7 +18,7 @@ import voluptuous as vol
 from homeassistant.components.light import VALID_TRANSITION
 from homeassistant.const import CONF_DEVICES, CONF_HOST, CONF_ID, CONF_MAC, CONF_TYPE
 from homeassistant.helpers import discovery
-from homeassistant.helpers.config_validation import ensure_list, positive_int, string
+from homeassistant.helpers.config_validation import ensure_list, positive_int, string, positive_float, boolean
 from homeassistant.helpers.entity import Entity
 
 # pylint: disable=relative-beyond-top-level
@@ -41,6 +41,9 @@ CONF_COVER = "cover"
 CONF_TRANSITION_TIME = "default_transition_seconds"
 CONF_FAN = "fan"
 DEFAULT_TYPE = "light"
+CONF_LONG_AND_DBL = "enable_long_and_double"
+CONF_LONG_TIME = "long_press_time"
+CONF_DBL_TIME = "double_press_time"
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -62,6 +65,9 @@ CONFIG_SCHEMA = vol.Schema(
                             vol.Optional(CONF_FAN): vol.All(
                                 ensure_list, [positive_int]
                             ),
+                            vol.Optional(CONF_LONG_AND_DBL): boolean,
+                            vol.Optional(CONF_LONG_TIME): positive_float,
+                            vol.Optional(CONF_DBL_TIME): positive_float,
                         }
                     ],
                 ),
@@ -195,7 +201,21 @@ async def async_setup_bridge(hass, config, fname, bridge):
     transition_time = None
     if CONF_TRANSITION_TIME in bridge:
         transition_time = bridge[CONF_TRANSITION_TIME]
-
+    
+    # load default enable_double_and_long/long_press_time/double_press_time, if present
+    enable_double_and_long = False
+    if CONF_LONG_AND_DBL in bridge:
+        enable_double_and_long = bridge[CONF_LONG_AND_DBL]
+    long_press_time = 1.5
+    if CONF_LONG_TIME in bridge:
+        long_press_time = bridge[CONF_LONG_TIME]
+    double_press_time = 0.5
+    if CONF_DBL_TIME in bridge:
+        double_press_time = bridge[CONF_DBL_TIME]
+    long_press_time = max(double_press_time + 0.2, long_press_time)
+    _LOGGER.debug("long_and_double_press: %d, long_press_time: %f, double_press_time: %f", enable_double_and_long,
+        long_press_time, double_press_time)
+        
     # load platform by type
     for device_type in types:
         component = device_type
@@ -210,6 +230,9 @@ async def async_setup_bridge(hass, config, fname, bridge):
                     CONF_MAC: mac_address,
                     CONF_DEVICES: types[device_type],
                     CONF_TRANSITION_TIME: transition_time,
+                    CONF_LONG_AND_DBL: enable_double_and_long,
+                    CONF_LONG_TIME: long_press_time,
+                    CONF_DBL_TIME: double_press_time,
                 },
                 config,
             )
