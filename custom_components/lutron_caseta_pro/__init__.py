@@ -206,10 +206,10 @@ async def async_setup_bridge(hass, config, fname, bridge):
     enable_double_and_long = False
     if CONF_LONG_AND_DBL in bridge:
         enable_double_and_long = bridge[CONF_LONG_AND_DBL]
-    long_press_time = 1.5
+    long_press_time = 1.4
     if CONF_LONG_TIME in bridge:
         long_press_time = bridge[CONF_LONG_TIME]
-    double_press_time = 0.5
+    double_press_time = 0.8
     if CONF_DBL_TIME in bridge:
         double_press_time = bridge[CONF_DBL_TIME]
     long_press_time = max(double_press_time + 0.2, long_press_time)
