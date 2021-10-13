@@ -96,17 +96,14 @@ async def async_setup_platform(hass, config, async_add_devices, discovery_info=N
 class CasetaPicoState(enum.Enum):
     idle = 0
     first_press = 1
-    wait_for_second = 2
-    single_click = 3
-    double_click = 4
-    long_click = 5
+    wait_for_second_press = 2
 
 # Button Processor
 class PicoRemoteButtonProcessor():
     class State(enum.Enum):
         idle = 0
         first_press = 1
-        wait_for_second = 2
+        wait_for_second_press = 2
         single_click = 3
         double_click = 4
         long_click = 5
@@ -122,35 +119,32 @@ class PicoRemoteButtonProcessor():
         self.double_duration = double_press_time
 
     def timeout(self):
-        self.lock.acquire()
-        if self.state == self.State.wait_for_second:
-            self.update(self.button_state)
-            self.state = self.State.idle
-        self.timer = None
-        self.lock.release()
+        with self.lock:
+            if self.state == self.State.wait_for_second_press:
+                self.update(self.button_state)
+                self.state = self.State.idle
+            self.timer = None
 
     def process(self, button_state):
-        self.lock.acquire()
-        if button_state != 0:
-            self.button_state = button_state
-            
-        if self.state == self.State.idle:
-            if button_state != 0: # 1st press
-                self.first_press_time = time.time()
-                self.state = self.State.first_press
-                self.timer = Timer(self.double_duration, self.timeout)
-                self.timer.start()
-        elif self.state == self.State.first_press:
-            if button_state == 0: # 1st release
-                if self.timer != None:
-                    self.state = self.State.wait_for_second
-                else:
-                    self.single_click()
-        elif self.state == self.State.wait_for_second:
-            if button_state != 0: # 2nd press
-                self.double_click()
-
-        self.lock.release()
+        with self.lock:
+            if button_state != 0:
+                self.button_state = button_state
+                
+            if self.state == self.State.idle:
+                if button_state != 0: # 1st press
+                    self.first_press_time = time.time()
+                    self.state = self.State.first_press
+                    self.timer = Timer(self.double_duration, self.timeout)
+                    self.timer.start()
+            elif self.state == self.State.first_press:
+                if button_state == 0: # 1st release
+                    if self.timer != None:
+                        self.state = self.State.wait_for_second_press
+                    else:
+                        self.single_click()
+            elif self.state == self.State.wait_for_second_press:
+                if button_state != 0: # 2nd press
+                    self.double_click()
 
     def single_click(self):
         if (time.time() - self.first_press_time) > self.long_duration:
@@ -164,7 +158,7 @@ class PicoRemoteButtonProcessor():
         self.state = self.State.idle
 
     def update(self, state):
-        _LOGGER.debug("pico button state update: %d", state)
+        _LOGGER.debug("pico button state update: button: %d, code: %d", self.button_state, state)
         self.device.update_state(state)
         self.device.async_write_ha_state()
         self.device.update_state(0)
@@ -219,9 +213,7 @@ class CasetaPicoRemote(CasetaEntity, Entity):
 
     def process(self, button_state):
         if self.enable_long_and_double:
-            _LOGGER.debug("long_and_double processing enabled")
             self.processor.process(button_state)
         else:
-            _LOGGER.debug("long_and_double processing disabled")
             self.update_state(button_state)
             self.async_write_ha_state()
