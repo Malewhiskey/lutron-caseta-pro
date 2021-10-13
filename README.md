@@ -1,4 +1,6 @@
-# Lutron Caseta Pro Component for Home Assistant
+# Lutron Caseta Pro Component for Home Assistant (Support Pico Remote Double and Long Press)
+
+**This is a fork of [Lutron Caseta Pro Component for Home Assistant](https://github.com/upsert/lutron-caseta-pro). Code to support Pico Remote long and double press was added. This readme file is mostly from the original project. I added necessary content to support the long/double press.
 
 [Lutron](http://www.lutron.com/) is an American lighting control company. They have several lines of home automation devices that manage light switches, dimmers, occupancy sensors, HVAC controls, etc.
 
@@ -99,6 +101,9 @@ lutron_caseta_pro:
         switch: [ 4, 5 ]
         cover: [ 11, 12 ]
         fan: [ 15 ]
+        enable_long_and_double: True
+        long_press_time: 1.2
+        double_press_time: 0.4
 ```
 
 Configuration variables:
@@ -107,6 +112,9 @@ Configuration variables:
 - **switch** (*Optional*): Array of integration IDs ("ID" in the "Zones" section of Integration Report)
 - **cover** (*Optional*): Array of integration IDs ("ID" in the "Zones" section of Integration Report)
 - **fan** (*Optional*): Array of integration IDs ("ID" in the "Zones" section of Integration Report)
+- **enable_long_and_double** (*Optional*): Boolean value to enable/disable long/double press
+- **long_press_time** (*Optional*): threshold time in seconds (float) for long press. default is 1.5s
+- **double_press_time** (*Optional*): threshold time in seconds (float) for double click. default is 0.5
 
 In the above example Zone 4 and 5 are configured as switches (e.g. `switch.<device name>` in Home Assistant), Zones 11 and 12 are shades (e.g. `cover.<device name>` in Home Assistant), and Zone 15 is a fan (e.g. `fan.<device name>`). If a listed ID is not found in the Integration Report, it will be ignored.
 
@@ -143,9 +151,12 @@ And use type `Integration`. Once installed, add your settings to `configuration.
 ## Pico Remote Sensors
 All Pico remotes in the system will each get their own `sensor` in Home Assistant.
 
-The sensor's value will change when a button is pressed according to this [button map](button_map.md).
-
-### Example Automation for a Pico Button
+The sensor's value will change when a button is pressed according to this [button map](button_map.md). For long press, the value is the base value +128 (0x80), for double click, the value is the base value +64 (0x40)
+### Type of click:
+#### Single: press and release within long_press_time, no second press registered in double_press_time. Event fires at release or end of double_press_time, whichever comes first
+#### Double: two press within double_press_time. Event fires on second press
+#### Long: push time is longer than long_press_time. Event fires on release
+### Example Automation for a Pico Button (single click)
 
 ```yaml
 - alias: Media Pico Button 1
@@ -163,6 +174,41 @@ The sensor's value will change when a button is pressed according to this [butto
     to: '1'
 ```
 
+### Example Automation for a Pico Button (double click)
+
+```yaml
+- alias: Media Pico Button 1
+  id: '1522884919017'
+  action:
+  - alias: Turn on Watch TV
+    service: remote.turn_on
+    data:
+      activity: '29535421'
+      entity_id: remote.living_room_harmony
+  condition: []
+  trigger:
+  - platform: state
+    entity_id: sensor.media_pico
+    to: '65'
+```
+### Example Automation for a Pico Button (long press)
+
+```yaml
+- alias: Media Pico Button 1
+  id: '1522884919017'
+  action:
+  - alias: Turn on Watch TV
+    service: remote.turn_on
+    data:
+      activity: '29535421'
+      entity_id: remote.living_room_harmony
+  condition: []
+  trigger:
+  - platform: state
+    entity_id: sensor.media_pico
+    to: '129'
+```
+
 ## Troubleshooting
 
 Enable debugging in your main configuration.yaml to see more logging:
@@ -177,6 +223,6 @@ logger:
 If connection errors are evident, try connecting to the IP listed in the configuration using a Telnet client such as [PuTTY](https://www.chiark.greenend.org.uk/~sgtatham/putty/latest.html). A connection refused or timeout error indicates the wrong IP address has been used or the Telnet Support has not been enabled in the mobile app under Settings -> Advanced -> Integration.
 
 ## Credits
-
+* Based on [Lutron Caseta Pro Component for Home Assistant](https://github.com/upsert/lutron-caseta-pro)
 * Based on a [branch](https://github.com/jhanssen/home-assistant/tree/caseta-0.40) of [home-assistant](https://github.com/home-assistant/home-assistant) authored by [jhanssen](https://github.com/jhanssen/)
 * Feedback and improvements suggested by the [Home Assistant Community](https://community.home-assistant.io/)
