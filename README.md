@@ -113,8 +113,8 @@ Configuration variables:
 - **cover** (*Optional*): Array of integration IDs ("ID" in the "Zones" section of Integration Report)
 - **fan** (*Optional*): Array of integration IDs ("ID" in the "Zones" section of Integration Report)
 - **enable_long_and_double** (*Optional*): Boolean value to enable/disable long/double press
-- **long_press_time** (*Optional*): threshold time in seconds (float) for long press. default is 1.5s
-- **double_press_time** (*Optional*): threshold time in seconds (float) for double click. default is 0.5
+- **long_press_time** (*Optional*): threshold time in seconds (float) for long press. default is 1.4
+- **double_press_time** (*Optional*): threshold time in seconds (float) for double click. default is 0.8
 
 Note that the double_press_time should not be too short. Due to the nature of the communication, the second push could be delayed (than the actual push). Using a short double_press_time may fail the double click test and generate two single push events.
 
