@@ -153,7 +153,7 @@ All Pico remotes in the system will each get their own `sensor` in Home Assistan
 
 The sensor's value will change when a button is pressed according to this [button map](button_map.md). For long press, the value is the base value +128 (0x80), for double click, the value is the base value +64 (0x40)
 ### Type of click:
-- Single: press and release within long_press_time, no second press registered in double_press_time. Event fires at release or end of double_press_time, whichever comes first
+- Single: press and release within long_press_time, no second press registered in double_press_time. Event fires at release (if longer than double_press_time) or end of double_press_time (if release before timeout)
 - Double: two press within double_press_time. Event fires on second press
 - Long: push time is longer than long_press_time. Event fires on release
 
