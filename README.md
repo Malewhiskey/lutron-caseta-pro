@@ -1,6 +1,6 @@
 # Lutron Caseta Pro Component for Home Assistant (Support Pico Remote Double and Long Press)
 
-**This is a fork of [Lutron Caseta Pro Component for Home Assistant](https://github.com/upsert/lutron-caseta-pro). Code to support Pico Remote long and double press was added. This readme file is mostly from the original project. I added necessary content to support the long/double press.
+**This is a fork of [Lutron Caseta Pro Component for Home Assistant](https://github.com/upsert/lutron-caseta-pro). Code to support Pico Remote long and double press was added. This readme file is mostly from the original project. I added necessary content to support the long/double press.**
 
 [Lutron](http://www.lutron.com/) is an American lighting control company. They have several lines of home automation devices that manage light switches, dimmers, occupancy sensors, HVAC controls, etc.
 
@@ -143,7 +143,7 @@ HACS will download and install the custom component for you and keep track of up
 
 Once HACS is setup, go to Settings -> Custom Repositories and add the following Repository:
 ``` 
-upsert/lutron-caseta-pro
+coldfire0200/lutron-caseta-pro
 ```
 
 And use type `Integration`. Once installed, add your settings to `configuration.yaml` as described above.
