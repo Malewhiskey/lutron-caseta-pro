@@ -102,3 +102,4 @@ ENV/
 
 .idea/
 lutron_caseta_pro_*.json
+*.bak
