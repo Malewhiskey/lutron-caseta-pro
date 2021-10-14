@@ -9,9 +9,9 @@ import logging
 from homeassistant.components.sensor import DOMAIN
 from homeassistant.const import CONF_DEVICES, CONF_HOST, CONF_ID, CONF_MAC, CONF_NAME
 from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.event import async_call_later
 import enum
 import time
-from threading import Timer, Lock
 
 from . import (
     ATTR_AREA_NAME,
@@ -112,39 +112,36 @@ class PicoRemoteButtonProcessor():
         self.device = dev
         self.state = self.State.idle
         self.button_state = 0
-        self.timer = None
-        self.lock = Lock()
         self.first_press_time = 0
         self.long_duration = long_press_time
         self.double_duration = double_press_time
+        self.is_timeout = False
 
-    def timeout(self):
-        with self.lock:
-            if self.state == self.State.wait_for_second_press:
-                self.update(self.button_state)
-                self.state = self.State.idle
-            self.timer = None
+    async def timeout(self, *_):
+        if self.state == self.State.wait_for_second_press:
+            self.single_click()
+        self.is_timeout = True
 
     def process(self, button_state):
-        with self.lock:
-            if button_state != 0:
-                self.button_state = button_state
+        if button_state != 0:
+            self.button_state = button_state
+            
+        if self.state == self.State.idle:
+            if button_state != 0: # 1st press
+                self.is_timeout = False
+                self.first_press_time = time.time()
+                self.state = self.State.first_press
+                async_call_later(self.device.hass, self.double_duration, self.timeout)
                 
-            if self.state == self.State.idle:
-                if button_state != 0: # 1st press
-                    self.first_press_time = time.time()
-                    self.state = self.State.first_press
-                    self.timer = Timer(self.double_duration, self.timeout)
-                    self.timer.start()
-            elif self.state == self.State.first_press:
-                if button_state == 0: # 1st release
-                    if self.timer != None:
-                        self.state = self.State.wait_for_second_press
-                    else:
-                        self.single_click()
-            elif self.state == self.State.wait_for_second_press:
-                if button_state != 0: # 2nd press
-                    self.double_click()
+        elif self.state == self.State.first_press:
+            if button_state == 0: # 1st release
+                if self.is_timeout == False:
+                    self.state = self.State.wait_for_second_press
+                else:
+                    self.single_click()
+        elif self.state == self.State.wait_for_second_press:
+            if button_state != 0: # 2nd press
+                self.double_click()
 
     def single_click(self):
         if (time.time() - self.first_press_time) > self.long_duration:
