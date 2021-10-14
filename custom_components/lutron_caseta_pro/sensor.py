@@ -118,6 +118,11 @@ class PicoRemoteButtonProcessor():
         self.is_timeout = False
         self.needs_cleanup = True
 
+    def reset(self):
+        self.needs_cleanup = False
+        self.is_timeout = False
+        self.state = self.State.idle
+
     async def timeout(self, *_):
         if self.state == self.State.wait_for_second_press:
             self.single_click()
@@ -126,7 +131,6 @@ class PicoRemoteButtonProcessor():
     async def cleanup(self, *_):
         if self.needs_cleanup:
             self.single_click()
-            _LOGGER.debug("pico button: cleanup work done")
 
     def process(self, button_state):
         if button_state != 0:
@@ -157,11 +161,11 @@ class PicoRemoteButtonProcessor():
             self.update(self.button_state | 0x80)
         else:
             self.update(self.button_state)
-        self.state = self.State.idle
+        self.reset()
 
     def double_click(self):
         self.update(self.button_state | 0x40)
-        self.state = self.State.idle
+        self.reset()
 
     def update(self, state):
         _LOGGER.debug("pico button state update: button: %d, code: %d", self.button_state, state)
@@ -169,7 +173,6 @@ class PicoRemoteButtonProcessor():
         self.device.async_write_ha_state()
         self.device.update_state(0)
         self.device.async_write_ha_state()
-        self.needs_cleanup = False
 
 # pylint: disable=too-many-instance-attributes
 class CasetaPicoRemote(CasetaEntity, Entity):
