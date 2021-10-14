@@ -100,75 +100,91 @@ class CasetaPicoState(enum.Enum):
 
 # Button Processor
 class PicoRemoteButtonProcessor():
+    """ Button Processor - Generate short/long/double press based on state transition """
+
     class State(enum.Enum):
+        """ Button Processor state """
         idle = 0
         first_press = 1
         wait_for_second_press = 2
-        single_click = 3
-        double_click = 4
-        long_click = 5
+
+    class Modifier(enum.IntFlag):
+        """ Button modifier """
+        short = 0x00
+        double = 0x40
+        long = 0x80
 
     def __init__(self, dev, long_press_time, double_press_time):
+        """Initialize button processor"""
         self.device = dev
         self.state = self.State.idle
-        self.button_state = 0
-        self.first_press_time = 0
+        self.button = 0
         self.long_duration = long_press_time
         self.double_duration = double_press_time
         self.is_timeout = False
-        self.needs_cleanup = True
+        self.cancel_long_press_timeout = None
 
     def reset(self):
-        self.needs_cleanup = False
+        """Reset button processor state, cancel long press timeout"""
         self.is_timeout = False
         self.state = self.State.idle
+        if self.cancel_long_press_timeout:
+            self.cancel_long_press_timeout()
+            self.cancel_long_press_timeout = None
 
-    async def timeout(self, *_):
+    async def double_press_timeout(self, *_):
+        """async function: handle double press timeout"""
         if self.state == self.State.wait_for_second_press:
-            self.single_click()
+            self.do_press(self.Modifier.short)
         self.is_timeout = True
 
-    async def cleanup(self, *_):
-        if self.needs_cleanup:
-            self.single_click()
+    async def long_press_timeout(self, *_):
+        """async function: handle long press timeout"""
+        self.do_press(self.Modifier.long)
 
-    def process(self, button_state):
-        if button_state != 0:
-            self.button_state = button_state
-            
-        if self.state == self.State.idle:
-            if button_state != 0: # 1st press
-                self.is_timeout = False
-                self.needs_cleanup = True
-                self.first_press_time = time.time()
-                self.state = self.State.first_press
-                async_call_later(self.device.hass, self.double_duration, self.timeout)
-                async_call_later(self.device.hass, self.long_duration + 1.0, self.cleanup)
+    def handle_idle_state(self, button):
+        """state handler: idle state"""
+        if button != 0: # 1st press
+            self.is_timeout = False
+            self.state = self.State.first_press
+            async_call_later(self.device.hass, self.double_duration, self.double_press_timeout)
+            self.cancel_long_press_timeout = \
+                async_call_later(self.device.hass, self.long_duration, self.long_press_timeout)
 
-        elif self.state == self.State.first_press:
-            if button_state == 0: # 1st release
-                if self.is_timeout == False:
-                    self.state = self.State.wait_for_second_press
-                else:
-                    self.single_click()
-                    
-        elif self.state == self.State.wait_for_second_press:
-            if button_state != 0: # 2nd press
-                self.double_click()
+    def handle_first_press_state(self, button):
+        """state handler: first_press state"""
+        if button == 0: # 1st release
+            if self.is_timeout == False:
+                self.state = self.State.wait_for_second_press
+            else:
+                self.do_press(self.Modifier.short)
 
-    def single_click(self):
-        if (time.time() - self.first_press_time) > self.long_duration:
-            self.update(self.button_state | 0x80)
-        else:
-            self.update(self.button_state)
-        self.reset()
+    def handle_wait_for_second_press_state(self, button):
+        """state handler: wait_for_second_press state"""
+        if button != 0: # 2nd press
+            self.do_press(self.Modifier.double)
 
-    def double_click(self):
-        self.update(self.button_state | 0x40)
+    """ state handler map """
+    state_handlers = {
+        State.idle: handle_idle_state,
+        State.first_press: handle_first_press_state,
+        State.wait_for_second_press: handle_wait_for_second_press_state
+    }
+    def process(self, button):
+        """process button based on current state"""
+        if button != 0:
+            self.button = button
+        if self.state in self.state_handlers:
+            self.state_handlers[self.state](self, button)
+
+    def do_press(self, modifier):
+        """generate press event"""
+        self.update(self.button | int(modifier))
         self.reset()
 
     def update(self, state):
-        _LOGGER.debug("pico button state update: button: %d, code: %d", self.button_state, state)
+        """update and reset ha state"""
+        _LOGGER.debug("pico button state update: button: %d, code: %d", self.button, state)
         self.device.update_state(state)
         self.device.async_write_ha_state()
         self.device.update_state(0)
@@ -221,9 +237,10 @@ class CasetaPicoRemote(CasetaEntity, Entity):
         """Update state."""
         self._state = state
 
-    def process(self, button_state):
+    def process(self, button):
+        """process button state"""
         if self.enable_long_and_double:
-            self.processor.process(button_state)
+            self.processor.process(button)
         else:
-            self.update_state(button_state)
+            self.update_state(button)
             self.async_write_ha_state()
