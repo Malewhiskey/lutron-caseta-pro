@@ -21,6 +21,13 @@ from . import (
     CONF_LONG_AND_DBL,
     CONF_LONG_TIME,
     CONF_DBL_TIME,
+    CONF_PRESS_TIMEOUT,
+    CONF_BUTTON_COMBINATION,
+    CONF_BTNCOMB_PICO_NAME,
+    CONF_BTNCOMB_COMBINATIONS,
+    CONF_BTNCOMB_CODE,
+    CONF_BTNCOMB_COMB,
+    CONF_BTNCOMB_SILENT,
     Caseta,
     CasetaData,
     CasetaEntity,
@@ -80,7 +87,8 @@ async def async_setup_platform(hass, config, async_add_devices, discovery_info=N
     data = CasetaSensorData(bridge)
     devices = [
         CasetaPicoRemote(pico, data, discovery_info[CONF_MAC], 
-            discovery_info[CONF_LONG_AND_DBL], discovery_info[CONF_LONG_TIME], discovery_info[CONF_DBL_TIME])
+            discovery_info[CONF_LONG_AND_DBL], discovery_info[CONF_LONG_TIME], discovery_info[CONF_DBL_TIME],
+            discovery_info[CONF_BUTTON_COMBINATION], discovery_info[CONF_PRESS_TIMEOUT])
         for pico in discovery_info[CONF_DEVICES]
     ]
     data.set_devices(devices)
@@ -114,47 +122,61 @@ class PicoRemoteButtonProcessor():
         double = 0x40
         long = 0x80
 
-    def __init__(self, dev, long_press_time, double_press_time):
+    def __init__(self, dev, long_press_time, double_press_time, comb_config, press_timeout):
         """Initialize button processor"""
         self.device = dev
         self.state = self.State.idle
         self.button = 0
-        self.long_duration = long_press_time
-        self.double_duration = double_press_time
-        self.is_timeout = False
-        self.cancel_long_press_timeout = None
-
+        self.timeout_callback = (self.double_press_timeout, self.long_press_timeout)
+        self.timeout_time = (double_press_time, long_press_time)
+        self.timeout_handle = [None, None]
+        self.timeout_flags = [False, False]
+        # button combination
+        self.silent_press = CONF_BTNCOMB_SILENT in comb_config and comb_config[CONF_BTNCOMB_SILENT]
+        self.combinations = {}
+        self.max_history_length = 0
+        if CONF_BTNCOMB_COMBINATIONS in comb_config:
+            for combination in comb_config[CONF_BTNCOMB_COMBINATIONS]:
+                comb_list = combination[CONF_BTNCOMB_COMB]
+                self.max_history_length = max(len(comb_list), self.max_history_length)
+                self.combinations[str(comb_list)[1:-1]] = combination[CONF_BTNCOMB_CODE]
+        self.key_history = []
+        self.last_press_time = time.time()
+        self.press_timeout = press_timeout
+        
     def reset(self):
         """Reset button processor state, cancel long press timeout"""
-        self.is_timeout = False
+        self.timeout_flags = [False, False]
         self.state = self.State.idle
-        if self.cancel_long_press_timeout:
-            self.cancel_long_press_timeout()
-            self.cancel_long_press_timeout = None
+        self.button = 0
+        for cancel_timeout in self.timeout_handle:
+            cancel_timeout()
 
     async def double_press_timeout(self, *_):
         """async function: handle double press timeout"""
         if self.state == self.State.wait_for_second_press:
             self.do_press(self.Modifier.short)
-        self.is_timeout = True
+        self.timeout_flags[0] = True
 
     async def long_press_timeout(self, *_):
         """async function: handle long press timeout"""
-        self.do_press(self.Modifier.long)
+        if self.state == self.State.first_press:
+            self.do_press(self.Modifier.long)
+        self.timeout_flags[1] = True
 
     def handle_idle_state(self, button):
         """state handler: idle state"""
         if button != 0: # 1st press
-            self.is_timeout = False
+            self.timeout_flags = [False, False]
             self.state = self.State.first_press
-            async_call_later(self.device.hass, self.double_duration, self.double_press_timeout)
-            self.cancel_long_press_timeout = \
-                async_call_later(self.device.hass, self.long_duration, self.long_press_timeout)
+            for i in range(0, 2):
+                self.timeout_handle[i] = \
+                    async_call_later(self.device.hass, self.timeout_time[i], self.timeout_callback[i])
 
     def handle_first_press_state(self, button):
         """state handler: first_press state"""
         if button == 0: # 1st release
-            if self.is_timeout == False:
+            if self.timeout_flags[0] == False:
                 self.state = self.State.wait_for_second_press
             else:
                 self.do_press(self.Modifier.short)
@@ -173,18 +195,45 @@ class PicoRemoteButtonProcessor():
     def process(self, button):
         """process button based on current state"""
         if button != 0:
+            if self.button != 0 and self.button != button:
+                # different button pressed while button processor still handle previous button
+                self.do_press(self.Modifier.short)
             self.button = button
         if self.state in self.state_handlers:
             self.state_handlers[self.state](self, button)
 
     def do_press(self, modifier):
         """generate press event"""
-        self.update(self.button | int(modifier))
+        modified_button = self.button | int(modifier)        
+        if not self.silent_press:
+            self.update(modified_button)
         self.reset()
+        # check key combinations
+        if self.combinations != {}:
+            self.process_combination(modified_button)
+
+    def process_combination(self, modified_button):
+        cur_time = time.time()
+        # check timeout
+        if (cur_time - self.last_press_time) > self.press_timeout:
+            self.key_history = [modified_button]
+        else:
+            # append to the end of key history
+            self.key_history += [modified_button]
+        self.last_press_time = cur_time
+        # check if match any combination
+        key_history_str = str(self.key_history)[1:-1]            
+        if key_history_str in self.combinations:
+            code = self.combinations[key_history_str]
+            self.update(code)
+            self.key_history = []       
+        # clear history if equal self.max_history_length (regardless matched or not)
+        if len(self.key_history) >= self.max_history_length:
+            self.key_history = []
 
     def update(self, state):
         """update and reset ha state"""
-        _LOGGER.debug("pico button state update: button: %d, code: %d", self.button, state)
+        _LOGGER.debug("[%s] pico button state update: button: %d, code: %d", self.device._name, self.button, state)
         self.device.update_state(state)
         self.device.async_write_ha_state()
         self.device.update_state(0)
@@ -194,7 +243,7 @@ class PicoRemoteButtonProcessor():
 class CasetaPicoRemote(CasetaEntity, Entity):
     """Representation of a Lutron Pico remote."""
 
-    def __init__(self, pico, data, mac, enable_long_and_double, long_press_time, double_press_time):
+    def __init__(self, pico, data, mac, enable_long_and_double, long_press_time, double_press_time, comb_config, press_timeout):
         """Initialize a Lutron Pico."""
         self._data = data
         self._name = pico[CONF_NAME]
@@ -212,8 +261,10 @@ class CasetaPicoRemote(CasetaEntity, Entity):
         self._state = 0
         self._mac = mac
         self._platform_domain = DOMAIN
-        self.processor = PicoRemoteButtonProcessor(self, long_press_time, double_press_time)
+        btn_comb_config = comb_config[self._name.upper()] if self._name.upper() in comb_config else {}
+        self.processor = PicoRemoteButtonProcessor(self, long_press_time, double_press_time, btn_comb_config, press_timeout)
         self.enable_long_and_double = enable_long_and_double
+        _LOGGER.debug(f'CasetaPicoRemote name: {self._name}')
 
     @property
     def device_state_attributes(self):

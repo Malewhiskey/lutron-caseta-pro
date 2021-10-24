@@ -1,6 +1,6 @@
 # Lutron Caseta Pro Component for Home Assistant (Support Pico Remote Double and Long Press)
 
-**This is a fork of [Lutron Caseta Pro Component for Home Assistant](https://github.com/upsert/lutron-caseta-pro). Code to support Pico Remote long and double press was added. This readme file is mostly from the original project. I added necessary content to support the long/double press.**
+**This is a fork of [Lutron Caseta Pro Component for Home Assistant](https://github.com/upsert/lutron-caseta-pro). Code to support Pico Remote long/double press and press combinations were added. This readme file is mostly from the original project. I added necessary content to support the long/double press.**
 
 [Lutron](http://www.lutron.com/) is an American lighting control company. They have several lines of home automation devices that manage light switches, dimmers, occupancy sensors, HVAC controls, etc.
 
@@ -104,6 +104,20 @@ lutron_caseta_pro:
         enable_long_and_double: True
         long_press_time: 1.4
         double_press_time: 0.8
+        
+        # press combination support (optional)
+        timeout_between_press: 3.0
+        button_combination:
+        - pico_name: "UpStairs Pico"
+          silent_press: False
+          combinations:
+            - code: 1000
+              combination: [65, 2, 2, 1]
+            - code: 1001
+              combination: [1, 66, 1, 2]
+            - code: 1002
+              combination: [1, 66, 2, 1, 4]
+        
 ```
 
 Configuration variables:
@@ -117,6 +131,15 @@ Configuration variables:
 - **double_press_time** (*Optional*): threshold time in seconds (float) for double click. default is 0.8
 
 Note that the double_press_time should not be too short. Due to the nature of the communication, the second push could be delayed (than the actual push). Using a short double_press_time may fail the double click test and generate two single push events.
+
+Press combination is supported on a per pico-remote basis. **enable_long_and_double** needs to be globally enabled (they share the ButtonProcessor)
+
+- **timeout_between_press** (*Optional): timeout (in seconds) between press. Press history will be cleared with timeout 
+- **pico_name** (*Required): name of the pico-device. You can check the log and look for "[custom_components.lutron_caseta_pro.sensor] CasetaPicoRemote name:"
+- **silent_press** (*Optional): if set to true no intermediate press will be registered
+- **code** (*Required): code that will be sent to HACS if combination matches
+- **combination** (*Required): combination press pattern. each press need to be pressed no longer than **timeout_between_press** after the last press. Support long and double press
+
 
 In the above example Zone 4 and 5 are configured as switches (e.g. `switch.<device name>` in Home Assistant), Zones 11 and 12 are shades (e.g. `cover.<device name>` in Home Assistant), and Zone 15 is a fan (e.g. `fan.<device name>`). If a listed ID is not found in the Integration Report, it will be ignored.
 

@@ -44,6 +44,13 @@ DEFAULT_TYPE = "light"
 CONF_LONG_AND_DBL = "enable_long_and_double"
 CONF_LONG_TIME = "long_press_time"
 CONF_DBL_TIME = "double_press_time"
+CONF_BUTTON_COMBINATION = 'button_combination'
+CONF_BTNCOMB_PICO_NAME = 'pico_name'
+CONF_BTNCOMB_COMBINATIONS = 'combinations'
+CONF_BTNCOMB_CODE = 'code'
+CONF_BTNCOMB_COMB = 'combination'
+CONF_BTNCOMB_SILENT = 'silent_press'
+CONF_PRESS_TIMEOUT = 'timeout_between_press'
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -68,6 +75,28 @@ CONFIG_SCHEMA = vol.Schema(
                             vol.Optional(CONF_LONG_AND_DBL): boolean,
                             vol.Optional(CONF_LONG_TIME): positive_float,
                             vol.Optional(CONF_DBL_TIME): positive_float,
+                            vol.Optional(CONF_PRESS_TIMEOUT): positive_float,
+                            vol.Optional(CONF_BUTTON_COMBINATION): vol.All(
+                                ensure_list,
+                                [
+                                    {
+                                        vol.Required(CONF_BTNCOMB_PICO_NAME): string,
+                                        vol.Optional(CONF_BTNCOMB_SILENT): boolean,
+                                        vol.Optional(CONF_BTNCOMB_COMBINATIONS): vol.All(
+                                            ensure_list,
+                                            [
+                                                {
+                                                    vol.Required(CONF_BTNCOMB_CODE): positive_int,
+                                                    vol.Required(CONF_BTNCOMB_COMB): vol.All(
+                                                        ensure_list,
+                                                        [positive_int]
+                                                    )
+                                                }
+                                            ]
+                                        )
+                                    }
+                                ]
+                            )
                         }
                     ],
                 ),
@@ -215,7 +244,16 @@ async def async_setup_bridge(hass, config, fname, bridge):
     long_press_time = max(double_press_time + 0.2, long_press_time)
     _LOGGER.debug("long_and_double_press: %d, long_press_time: %f, double_press_time: %f", enable_double_and_long,
         long_press_time, double_press_time)
-        
+    timeout_between_press = 3.0
+    if CONF_PRESS_TIMEOUT in bridge:
+        timeout_between_press = bridge[CONF_PRESS_TIMEOUT]
+
+    button_combination_config = {}
+    if CONF_BUTTON_COMBINATION in bridge:
+        button_combination = bridge[CONF_BUTTON_COMBINATION]
+        for comb_config in button_combination:
+            pico_name = comb_config[CONF_BTNCOMB_PICO_NAME]
+            button_combination_config[pico_name.upper()] = comb_config
     # load platform by type
     for device_type in types:
         component = device_type
@@ -233,6 +271,8 @@ async def async_setup_bridge(hass, config, fname, bridge):
                     CONF_LONG_AND_DBL: enable_double_and_long,
                     CONF_LONG_TIME: long_press_time,
                     CONF_DBL_TIME: double_press_time,
+                    CONF_BUTTON_COMBINATION: button_combination_config,
+                    CONF_PRESS_TIMEOUT: timeout_between_press
                 },
                 config,
             )
