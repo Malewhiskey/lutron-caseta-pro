@@ -109,7 +109,7 @@ lutron_caseta_pro:
         timeout_between_press: 3.0
         button_combination:
         - pico_name: "UpStairs Pico"
-          silent_press: False
+          silent_press: True
           combinations:
             - code: 1000
               combination: [65, 2, 2, 1]
