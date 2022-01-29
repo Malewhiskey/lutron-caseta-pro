@@ -1,10 +1,10 @@
 {
   "domain": "lutron_caseta_pro",
   "name": "Lutron Caséta Smart Bridge PRO / RA2 Select",
-  "documentation": "https://github.com/upsert/lutron-caseta-pro",
-  "issue_tracker": "https://github.com/upsert/lutron-caseta-pro/issues",
+  "documentation": "https://github.com/coldfire0200/lutron-caseta-pro",
+  "issue_tracker": "https://github.com/coldfire0200/lutron-caseta-pro/issues",
   "dependencies": ["configurator"],
-  "codeowners": ["@upsert"],
+  "codeowners": ["@coldfire0200"],
   "requirements": [],
   "version": "2022.01"
 }
